@@ -5,15 +5,17 @@ namespace BluetoothTerminal;
 
 public class BluetoothTerminal : IDisposable
 {
-    private readonly BluetoothClient _client;
-    private BluetoothDeviceInfo? _selectedDevice = null;
+    private BluetoothClient _client;
+    private BluetoothDeviceInfo? _selectedDevice;
     private List<BluetoothDeviceInfo> _discoveredDevices;
     private StreamWriter? _streamWriter;
+    private bool _connected;
 
     public BluetoothTerminal()
     {
         _client = new BluetoothClient();
         _discoveredDevices = [];
+        _connected = false;
     }
 
     private static void PrintHelp()
@@ -23,6 +25,7 @@ public class BluetoothTerminal : IDisposable
         Console.WriteLine("'refresh' or 'r' refresh available devices");
         Console.WriteLine("'select' or 's' [DEVICE_NAME] selects a device");
         Console.WriteLine("'connect' or 'c' [PIN?] connect to a selected device with an optional Bluetooth pin");
+        Console.WriteLine("'disconnect' or 'dc' disconnects from selected device");
         Console.WriteLine("'msg' [MESSAGE] sends a message to selected device");
         Console.WriteLine("'quit' or 'q' quits the terminal ");
     }
@@ -94,12 +97,20 @@ public class BluetoothTerminal : IDisposable
         _client.Connect(_selectedDevice.DeviceAddress, BluetoothService.SerialPort);
         Console.WriteLine("Connected");
 
+        _connected = true;
+
         var stream = _client.GetStream();
         _streamWriter = new(stream, System.Text.Encoding.ASCII);
     }
 
     private void Msg(string message)
     {
+        if (!_connected)
+        {
+            Console.WriteLine("No connected");
+            return;
+        }
+
         if (_selectedDevice is null)
         {
             Console.WriteLine("No device selected");
@@ -116,6 +127,18 @@ public class BluetoothTerminal : IDisposable
         _streamWriter?.Flush();
     }
 
+    private void Disconnect()
+    {
+        if (!_connected)
+        {
+            return;
+        }
+
+        _client.Dispose();
+        _client = new BluetoothClient();
+        _connected = false;
+    }
+
     public async Task Run()
     {
         Console.Clear();
@@ -130,7 +153,7 @@ public class BluetoothTerminal : IDisposable
         {
             if (_selectedDevice is not null)
             {
-                var connected = _client.Connected ? "$" : string.Empty;
+                var connected = _connected ? "$" : string.Empty;
                 Console.Write($"{connected}({_selectedDevice.DeviceName})>> ");
             }
             else
@@ -164,6 +187,9 @@ public class BluetoothTerminal : IDisposable
                     break;
                 case "connect" or "c":
                     Connect(cmdParams.Length > 1 ? cmdParams[0] : null);
+                    break;
+                case "disconnect" or "dc":
+                    Disconnect();
                     break;
                 case "msg":
                     Msg(string.Join(' ', cmdParams));
